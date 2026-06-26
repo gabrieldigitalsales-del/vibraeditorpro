@@ -405,7 +405,7 @@ ${svg}
         <header className="preview-header">
           <div>
             <h2>Assinatura executiva</h2>
-            <p>Base fiel à imagem aprovada, sem marcas d'água. Exportação atual: {outputSize}.</p>
+            <p></p>
           </div>
           <div className="device-tags">
             <span><Monitor size={16} /> Desktop</span>
