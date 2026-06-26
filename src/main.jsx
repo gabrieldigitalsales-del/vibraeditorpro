@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Download, FileCode2, Image as ImageIcon, RotateCcw, Upload, Smartphone, Monitor } from 'lucide-react';
+import { Download, FileCode2, Image as ImageIcon, RotateCcw, Smartphone, Monitor } from 'lucide-react';
 import './styles.css';
 
 const BASE_WIDTH = 1536;
@@ -281,31 +281,104 @@ function App() {
 
   async function exportHtml() {
     try {
-      const svg = await prepareSvgForExport(true);
+      setStatus('Gerando HTML com links alinhados...');
+      const svg = await prepareSvgForExport(false);
+      const svgUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+
+      const makeBlob = (canvas, quality) => new Promise((resolve) => {
+        canvas.toBlob(resolve, 'image/jpeg', quality);
+      });
+
+      const rendered = await new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = async () => {
+          const candidateWidths = [700, 650, 600];
+          const qualities = [0.84, 0.78, 0.72, 0.66, 0.60, 0.54, 0.48];
+          let chosen = null;
+
+          for (const emailWidth of candidateWidths) {
+            const emailHeight = Math.round(emailWidth * BASE_HEIGHT / BASE_WIDTH);
+            const canvas = document.createElement('canvas');
+            canvas.width = emailWidth;
+            canvas.height = emailHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, emailWidth, emailHeight);
+            ctx.drawImage(img, 0, 0, emailWidth, emailHeight);
+
+            for (const quality of qualities) {
+              const blob = await makeBlob(canvas, quality);
+              if (!blob) continue;
+              if (blob.size <= 64 * 1024 || emailWidth === candidateWidths.at(-1)) {
+                chosen = { blob, width: emailWidth, height: emailHeight, quality };
+                break;
+              }
+            }
+            if (chosen) break;
+          }
+
+          if (!chosen) {
+            reject(new Error('Não foi possível renderizar a imagem da assinatura.'));
+            return;
+          }
+
+          const reader = new FileReader();
+          reader.onload = () => resolve({ ...chosen, dataUrl: reader.result });
+          reader.onerror = reject;
+          reader.readAsDataURL(chosen.blob);
+        };
+        img.onerror = reject;
+        img.src = svgUrl;
+      });
+
+      const sx = rendered.width / BASE_WIDTH;
+      const sy = rendered.height / BASE_HEIGHT;
+      const scaleCoords = (coords) => coords.split(',').map((n, i) => Math.round(Number(n) * (i % 2 === 0 ? sx : sy))).join(',');
+      const phoneDigits = String(data.phone || '').replace(/[^0-9+]/g, '');
+
+      const links = [
+        { href: data.nameLink, alt: 'Nome', coords: '70,70,790,155' },
+        { href: data.roleLink, alt: 'Cargo', coords: '70,155,560,205' },
+        { href: data.emailLink || (data.email ? `mailto:${data.email}` : ''), alt: 'E-mail', coords: '95,235,790,306' },
+        { href: data.siteLink || data.site, alt: 'Site', coords: '95,306,790,374' },
+        { href: data.phoneLink || (phoneDigits ? `tel:${phoneDigits}` : ''), alt: 'Telefone', coords: '95,398,790,478' },
+        { href: data.addressLink, alt: 'Endereço', coords: '95,488,800,594' },
+        { href: data.brandLink, alt: 'Vibra Soluções', coords: '880,90,1465,590' },
+        { href: data.brandLink, alt: 'Parceiros Vibra', coords: '40,700,1495,845' },
+      ].filter((item) => String(item.href || '').trim() && String(item.href || '').trim() !== '#');
+
+      const areas = links.map((item) => {
+        const href = esc(normalizeUrl(item.href));
+        return `          <area shape="rect" coords="${scaleCoords(item.coords)}" href="${href}" target="_blank" alt="${esc(item.alt)}" title="${esc(item.alt)}">`;
+      }).join('\n');
+
       const html = `<!doctype html>
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Assinatura ${esc(data.name)}</title>
-<style>
-  body { margin:0; padding:24px; background:#f4f7fb; font-family:Arial,Helvetica,sans-serif; }
-  .signature { width:100%; max-width:920px; }
-  svg { width:100%; height:auto; display:block; }
-  a { cursor:pointer; }
-</style>
+<title>Assinatura ${esc(data.name || 'Vibra')}</title>
 </head>
-<body>
-  <div class="signature">
-${svg}
-  </div>
+<body style="margin:0;padding:0;background:#ffffff;">
+  <table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;mso-table-lspace:0pt;mso-table-rspace:0pt;">
+    <tr>
+      <td style="padding:0;margin:0;line-height:0;">
+        <img src="${rendered.dataUrl}" width="${rendered.width}" height="${rendered.height}" usemap="#vibra-signature-map" alt="Assinatura Vibra Soluções - ${esc(data.name || 'Vibra')}" style="display:block;width:${rendered.width}px;height:${rendered.height}px;border:0;outline:none;text-decoration:none;">
+        <map name="vibra-signature-map" id="vibra-signature-map">
+${areas}
+        </map>
+      </td>
+    </tr>
+  </table>
 </body>
 </html>`;
-      downloadBlob(html, `assinatura-vibra-${slug(data.name)}.html`, 'text/html;charset=utf-8');
-      setStatus('HTML clicável exportado com sucesso.');
+
+      downloadBlob(html, `assinatura-vibra-${slug(data.name || 'assinatura')}-multilinks.html`, 'text/html;charset=utf-8');
+      setStatus(`HTML exportado com links alinhados: ${rendered.width} × ${rendered.height}px | ${(rendered.blob.size / 1024).toFixed(1)} KB.`);
     } catch (error) {
       console.error(error);
-      setStatus('Erro ao exportar HTML.');
+      setStatus('Erro ao exportar HTML com múltiplos links.');
     }
   }
 
@@ -386,7 +459,7 @@ ${svg}
             <Field label="Escala export." type="number" value={data.exportScale} onChange={(v) => update('exportScale', Math.max(1, Number(v) || 2))} />
           </div>
           <label className="field-label">Painel fixo sem marca d'água</label>
-          <input className="range" type="range" min="1" max="1" step="0.01" value="1" readOnly />          
+          <input className="range" type="range" min="1" max="1" step="0.01" value="1" readOnly />
         </section>
 
         <section className="export-grid">
@@ -402,14 +475,14 @@ ${svg}
 
       <main className="preview-area">
         <header className="preview-header">
-  <div>
-    <h2>Assinatura executiva</h2>
-  </div>
-  <div className="device-tags">
-    <span><Monitor size={16} /> Desktop</span>
-    <span><Smartphone size={16} /> Mobile</span>
-  </div>
-</header>
+          <div>
+            <h2>Assinatura executiva</h2>
+          </div>
+          <div className="device-tags">
+            <span><Monitor size={16} /> Desktop</span>
+            <span><Smartphone size={16} /> Mobile</span>
+          </div>
+        </header>
 
         <div className="preview-card" ref={svgWrapRef}>
           <div className="signature-scale" dangerouslySetInnerHTML={{ __html: svgMarkup }} />
