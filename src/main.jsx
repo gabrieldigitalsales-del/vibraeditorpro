@@ -386,12 +386,7 @@ ${svg}
             <Field label="Escala export." type="number" value={data.exportScale} onChange={(v) => update('exportScale', Math.max(1, Number(v) || 2))} />
           </div>
           <label className="field-label">Painel fixo sem marca d'água</label>
-          <input className="range" type="range" min="1" max="1" step="0.01" value="1" readOnly />
-          <label className="upload-box">
-            <Upload size={18} />
-            Trocar imagem base
-            <input type="file" accept="image/*" onChange={handleBgUpload} />
-          </label>
+          <input className="range" type="range" min="1" max="1" step="0.01" value="1" readOnly />          
         </section>
 
         <section className="export-grid">
@@ -407,15 +402,14 @@ ${svg}
 
       <main className="preview-area">
         <header className="preview-header">
-          <div>
-            <h2>Assinatura executiva</h2>
-            <p>Base fiel à imagem aprovada, sem marcas d'água. Exportação atual: {outputSize}.</p>
-          </div>
-          <div className="device-tags">
-            <span><Monitor size={16} /> Desktop</span>
-            <span><Smartphone size={16} /> Mobile</span>
-          </div>
-        </header>
+  <div>
+    <h2>Assinatura executiva</h2>
+  </div>
+  <div className="device-tags">
+    <span><Monitor size={16} /> Desktop</span>
+    <span><Smartphone size={16} /> Mobile</span>
+  </div>
+</header>
 
         <div className="preview-card" ref={svgWrapRef}>
           <div className="signature-scale" dangerouslySetInnerHTML={{ __html: svgMarkup }} />
