@@ -5,7 +5,9 @@ import './styles.css';
 
 const BASE_WIDTH = 1536;
 const BASE_HEIGHT = 858;
-const EXPORT_SCALE = 2;
+const EMAIL_WIDTH = 700;
+const EMAIL_HEIGHT = Math.round(EMAIL_WIDTH * BASE_HEIGHT / BASE_WIDTH);
+const MAX_EMAIL_JPG_KB = 40;
 const DEFAULT_BG = '/modelo.jpg';
 
 const initialData = {
@@ -32,7 +34,6 @@ const initialData = {
   roleSize: 31,
   textSize: 22,
   opacityPanel: 1,
-  exportScale: 2,
 };
 
 function esc(value = '') {
@@ -217,7 +218,7 @@ function App() {
     }
   });
   const [bg, setBg] = useState(DEFAULT_BG);
-  const [status, setStatus] = useState('Pronto para editar e exportar.');
+  const [status, setStatus] = useState('Pronto para editar. Padrão de assinatura: 700 × 391px.');
   const svgWrapRef = useRef(null);
 
   useEffect(() => {
@@ -229,50 +230,99 @@ function App() {
   const update = (key, value) => setData((old) => ({ ...old, [key]: value }));
 
   async function prepareSvgForExport(includeLinks = false) {
-    setStatus('Preparando arquivo em alta nitidez...');
+    setStatus('Preparando arquivo...');
     const bgData = await urlToDataUrl(bg);
     return buildSignatureSvg(data, bgData, includeLinks);
+  }
+
+  function renderSvgToImage(svg) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+    });
+  }
+
+  function canvasToBlob(canvas, mime, quality) {
+    return new Promise((resolve) => canvas.toBlob(resolve, mime, quality));
+  }
+
+  async function makeEmailJpgBlob(svg, maxKb = MAX_EMAIL_JPG_KB) {
+    const img = await renderSvgToImage(svg);
+    const widths = [EMAIL_WIDTH, 650, 600, 560, 520];
+    const qualities = [0.82, 0.76, 0.70, 0.64, 0.58, 0.52, 0.46, 0.40, 0.34];
+    let fallback = null;
+
+    for (const width of widths) {
+      const height = Math.round(width * BASE_HEIGHT / BASE_WIDTH);
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, width, height);
+      ctx.drawImage(img, 0, 0, width, height);
+
+      for (const quality of qualities) {
+        const blob = await canvasToBlob(canvas, 'image/jpeg', quality);
+        if (!blob) continue;
+        fallback = { blob, width, height, quality };
+        if (blob.size <= maxKb * 1024) return fallback;
+      }
+    }
+    return fallback;
   }
 
   async function exportImage(format) {
     try {
       const svg = await prepareSvgForExport(false);
-      const svgUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
-      const img = new Image();
-      const scale = Number(data.exportScale || EXPORT_SCALE);
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = BASE_WIDTH * scale;
-        canvas.height = BASE_HEIGHT * scale;
-        const ctx = canvas.getContext('2d');
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
-        if (format === 'jpeg') {
-          ctx.fillStyle = '#ffffff';
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      if (format === 'jpeg') {
+        setStatus(`Gerando JPG padrão de e-mail até ${MAX_EMAIL_JPG_KB}KB...`);
+        const result = await makeEmailJpgBlob(svg, MAX_EMAIL_JPG_KB);
+        if (!result?.blob) {
+          setStatus('Erro ao gerar JPG otimizado.');
+          return;
         }
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        const mime = format === 'jpeg' ? 'image/jpeg' : 'image/png';
-        const ext = format === 'jpeg' ? 'jpg' : 'png';
-        const file = `assinatura-vibra-${slug(data.name)}-${scale}x.${ext}`;
-        canvas.toBlob((blob) => {
-          if (!blob) {
-            setStatus('Erro ao gerar imagem. Tente novamente.');
-            return;
-          }
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = file;
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-          setTimeout(() => URL.revokeObjectURL(url), 400);
-          setStatus(`Imagem ${ext.toUpperCase()} exportada em ${canvas.width} × ${canvas.height}px.`);
-        }, mime, 0.96);
-      };
-      img.onerror = () => setStatus('Erro ao carregar SVG para exportação.');
-      img.src = svgUrl;
+        const url = URL.createObjectURL(result.blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `assinatura-vibra-${slug(data.name || 'assinatura')}-email-${result.width}px.jpg`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 400);
+        const kb = (result.blob.size / 1024).toFixed(1);
+        setStatus(`JPG padrão exportado: ${result.width} × ${result.height}px | ${kb}KB | qualidade ${result.quality}.`);
+        return;
+      }
+
+      setStatus(`Gerando PNG padrão de e-mail ${EMAIL_WIDTH} × ${EMAIL_HEIGHT}px...`);
+      const img = await renderSvgToImage(svg);
+      const canvas = document.createElement('canvas');
+      canvas.width = EMAIL_WIDTH;
+      canvas.height = EMAIL_HEIGHT;
+      const ctx = canvas.getContext('2d');
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const blob = await canvasToBlob(canvas, 'image/png', 1);
+      if (!blob) {
+        setStatus('Erro ao gerar PNG.');
+        return;
+      }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `assinatura-vibra-${slug(data.name || 'assinatura')}-email-${EMAIL_WIDTH}px.png`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 400);
+      setStatus(`PNG padrão exportado: ${EMAIL_WIDTH} × ${EMAIL_HEIGHT}px | ${(blob.size / 1024).toFixed(1)}KB.`);
     } catch (error) {
       console.error(error);
       setStatus('Erro na exportação. Verifique se a imagem base está carregando.');
@@ -283,54 +333,15 @@ function App() {
     try {
       setStatus('Gerando HTML com links alinhados...');
       const svg = await prepareSvgForExport(false);
-      const svgUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
-
-      const makeBlob = (canvas, quality) => new Promise((resolve) => {
-        canvas.toBlob(resolve, 'image/jpeg', quality);
-      });
-
+      const renderedBase = await makeEmailJpgBlob(svg, MAX_EMAIL_JPG_KB);
+      if (!renderedBase?.blob) {
+        throw new Error('Não foi possível renderizar a imagem da assinatura.');
+      }
       const rendered = await new Promise((resolve, reject) => {
-        const img = new Image();
-        img.onload = async () => {
-          const candidateWidths = [700, 650, 600];
-          const qualities = [0.84, 0.78, 0.72, 0.66, 0.60, 0.54, 0.48];
-          let chosen = null;
-
-          for (const emailWidth of candidateWidths) {
-            const emailHeight = Math.round(emailWidth * BASE_HEIGHT / BASE_WIDTH);
-            const canvas = document.createElement('canvas');
-            canvas.width = emailWidth;
-            canvas.height = emailHeight;
-            const ctx = canvas.getContext('2d');
-            ctx.imageSmoothingEnabled = true;
-            ctx.imageSmoothingQuality = 'high';
-            ctx.fillStyle = '#ffffff';
-            ctx.fillRect(0, 0, emailWidth, emailHeight);
-            ctx.drawImage(img, 0, 0, emailWidth, emailHeight);
-
-            for (const quality of qualities) {
-              const blob = await makeBlob(canvas, quality);
-              if (!blob) continue;
-              if (blob.size <= 64 * 1024 || emailWidth === candidateWidths.at(-1)) {
-                chosen = { blob, width: emailWidth, height: emailHeight, quality };
-                break;
-              }
-            }
-            if (chosen) break;
-          }
-
-          if (!chosen) {
-            reject(new Error('Não foi possível renderizar a imagem da assinatura.'));
-            return;
-          }
-
-          const reader = new FileReader();
-          reader.onload = () => resolve({ ...chosen, dataUrl: reader.result });
-          reader.onerror = reject;
-          reader.readAsDataURL(chosen.blob);
-        };
-        img.onerror = reject;
-        img.src = svgUrl;
+        const reader = new FileReader();
+        reader.onload = () => resolve({ ...renderedBase, dataUrl: reader.result });
+        reader.onerror = reject;
+        reader.readAsDataURL(renderedBase.blob);
       });
 
       const sx = rendered.width / BASE_WIDTH;
@@ -406,8 +417,6 @@ ${areas}
     reader.readAsDataURL(file);
   }
 
-  const outputSize = `${BASE_WIDTH * Number(data.exportScale || EXPORT_SCALE)} × ${BASE_HEIGHT * Number(data.exportScale || EXPORT_SCALE)} px`;
-
   return (
     <div className="app-shell">
       <aside className="editor-panel">
@@ -456,15 +465,15 @@ ${areas}
           </div>
           <div className="two-cols">
             <Field label="Cargo px" type="number" value={data.roleSize} onChange={(v) => update('roleSize', Number(v))} />
-            <Field label="Escala export." type="number" value={data.exportScale} onChange={(v) => update('exportScale', Math.max(1, Number(v) || 2))} />
+            <Field label="Tamanho padrão" value={`${EMAIL_WIDTH} × ${EMAIL_HEIGHT}px`} onChange={() => {}} />
           </div>
           <label className="field-label">Painel fixo sem marca d'água</label>
           <input className="range" type="range" min="1" max="1" step="0.01" value="1" readOnly />
         </section>
 
         <section className="export-grid">
-          <button className="btn primary" onClick={() => exportImage('png')}><ImageIcon size={18} /> PNG alta nitidez</button>
-          <button className="btn secondary" onClick={() => exportImage('jpeg')}><Download size={18} /> JPG alta nitidez</button>
+          <button className="btn primary" onClick={() => exportImage('png')}><ImageIcon size={18} /> PNG padrão e-mail</button>
+          <button className="btn secondary" onClick={() => exportImage('jpeg')}><Download size={18} /> JPG até 40KB</button>
           <button className="btn secondary" onClick={exportHtml}><FileCode2 size={18} /> HTML clicável</button>
           <button className="btn ghost" onClick={exportSvg}><FileCode2 size={18} /> SVG clicável</button>
           <button className="btn danger" onClick={reset}><RotateCcw size={18} /> Restaurar</button>
