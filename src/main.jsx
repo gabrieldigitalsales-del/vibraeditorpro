@@ -79,23 +79,31 @@ async function urlToDataUrl(url) {
 }
 
 function iconSvg(type, x, y, color) {
-  const circle = `
-    <circle cx="${x}" cy="${y}" r="25" fill="none" stroke="${color}" stroke-width="2.4" opacity=".95"/>
-    <circle cx="${x}" cy="${y}" r="21" fill="${color}" opacity=".08"/>
+  const ring = `
+    <circle cx="${x}" cy="${y}" r="25" fill="none" stroke="${color}" stroke-width="2.35" opacity=".95"/>
+    <circle cx="${x}" cy="${y}" r="20.5" fill="${color}" opacity=".08"/>
   `;
+
+  const openGroup = `<g transform="translate(${x}, ${y})" fill="none" stroke="#f5ffff" stroke-linecap="round" stroke-linejoin="round">`;
+  const closeGroup = `</g>`;
+
   if (type === 'mail') {
-    return `${circle}<rect x="${x - 11}" y="${y - 8}" width="22" height="16" rx="2" fill="none" stroke="#f5ffff" stroke-width="2"/><path d="M${x - 11} ${y - 8} L${x} ${y + 2} L${x + 11} ${y - 8}" fill="none" stroke="#f5ffff" stroke-width="2"/>`;
+    return `${ring}${openGroup}<rect x="-10" y="-7" width="20" height="14" rx="2" stroke-width="2"/><path d="M-10 -7 L0 1 L10 -7" stroke-width="2"/>${closeGroup}`;
   }
+
   if (type === 'web') {
-    return `${circle}<circle cx="${x}" cy="${y}" r="10" fill="none" stroke="#f5ffff" stroke-width="2"/><path d="M${x - 10} ${y} H${x + 10} M${x} ${y - 10} C${x + 6} ${y - 4} ${x + 6} ${y + 4} ${x} ${y + 10} M${x} ${y - 10} C${x - 6} ${y - 4} ${x - 6} ${y + 4} ${x} ${y + 10}" fill="none" stroke="#f5ffff" stroke-width="1.6"/>`;
+    return `${ring}${openGroup}<circle cx="0" cy="0" r="10" stroke-width="2"/><path d="M-10 0 H10" stroke-width="1.9"/><path d="M0 -10 C6 -4 6 4 0 10" stroke-width="1.55"/><path d="M0 -10 C-6 -4 -6 4 0 10" stroke-width="1.55"/>${closeGroup}`;
   }
+
   if (type === 'phone') {
-    return `${circle}<path d="M${x - 5} ${y - 10} c-3 0-5 2-5 5 0 11 12 23 23 23 3 0 5-2 5-5 v-4 l-7-3 -4 4 c-6-3-10-7-13-13 l4-4 -3-7z" fill="none" stroke="#f5ffff" stroke-width="2.1" stroke-linejoin="round"/>`;
+    return `${ring}${openGroup}<path d="M-6.5 -10.5c-1.7 0-3 1.3-3 3 0 9.4 7.6 17 17 17 1.7 0 3-1.3 3-3V3.5l-5.4-2.1-2.8 2.8c-3.3-1.7-5.9-4.3-7.6-7.6l2.8-2.8-2.1-5.4z" stroke-width="2.05"/>${closeGroup}`;
   }
+
   if (type === 'pin') {
-    return `${circle}<path d="M${x} ${y + 13} C${x - 9} ${y + 4} ${x - 11} ${y - 2} ${x - 11} ${y - 7} a11 11 0 1 1 22 0 C${x + 11} ${y - 2} ${x + 9} ${y + 4} ${x} ${y + 13}Z" fill="none" stroke="#f5ffff" stroke-width="2"/><circle cx="${x}" cy="${y - 7}" r="3.5" fill="#f5ffff"/>`;
+    return `${ring}${openGroup}<path d="M0 12 C-8 4 -10 -1 -10 -6.5 a10 10 0 1 1 20 0 C10 -1 8 4 0 12Z" stroke-width="2"/><circle cx="0" cy="-6.5" r="3.2" fill="#f5ffff" stroke="none"/>${closeGroup}`;
   }
-  return `${circle}<rect x="${x - 9}" y="${y - 12}" width="18" height="24" fill="none" stroke="#f5ffff" stroke-width="2"/><path d="M${x - 4} ${y - 6}h2M${x + 4} ${y - 6}h2M${x - 4} ${y}h2M${x + 4} ${y}h2M${x - 4} ${y + 6}h2M${x + 4} ${y + 6}h2M${x - 14} ${y + 12}h28" stroke="#f5ffff" stroke-width="2" fill="none"/>`;
+
+  return `${ring}${openGroup}<rect x="-8" y="-11" width="16" height="22" stroke-width="2"/><path d="M-4 -5h2M2 -5h2M-4 0h2M2 0h2M-4 5h2M2 5h2M-12 11h24" stroke-width="2"/>${closeGroup}`;
 }
 
 function buildSignatureSvg(data, bgHref, includeLinks = true) {
@@ -147,17 +155,13 @@ function buildSignatureSvg(data, bgHref, includeLinks = true) {
     <text x="84" y="184" fill="${accent}" font-size="${Number(d.roleSize)}" font-family="Arial, Helvetica, sans-serif" font-weight="800" filter="url(#vibraTextShadow)">${esc(d.role)}</text>
   ${linkClose}
 
-  ${iconSvg('mail', 134, 271, accent)}
-  ${iconSvg('web', 134, 337, accent)}
-  ${iconSvg('phone', 134, 438, accent)}
-  ${iconSvg('pin', 134, 528, accent)}
-  ${iconSvg('building', 134, 624, accent)}
-
-  <line x1="193" y1="244" x2="193" y2="298" stroke="${accent}" stroke-width="1.4" opacity=".72"/>
-  <line x1="193" y1="310" x2="193" y2="364" stroke="${accent}" stroke-width="1.4" opacity=".72"/>
-  <line x1="193" y1="411" x2="193" y2="465" stroke="${accent}" stroke-width="1.4" opacity=".72"/>
-  <line x1="193" y1="499" x2="193" y2="573" stroke="${accent}" stroke-width="1.4" opacity=".72"/>
-  <line x1="193" y1="598" x2="193" y2="650" stroke="${accent}" stroke-width="1.4" opacity=".72"/>
+  ${[
+    ['mail', 271],
+    ['web', 337],
+    ['phone', 438],
+    ['pin', 528],
+    ['building', 624],
+  ].map(([type, centerY]) => `${iconSvg(type, 134, centerY, accent)}<line x1="193" y1="${centerY - 27}" x2="193" y2="${centerY + 27}" stroke="${accent}" stroke-width="1.4" opacity=".72"/>`).join('')}
 
   ${linkOpen(d.emailLink || (d.email ? `mailto:${d.email}` : '#'))}
     <text x="218" y="281" fill="${faded}" font-size="${emailSize}" font-family="Arial, Helvetica, sans-serif" font-weight="400">${esc(d.email)}</text>
@@ -405,7 +409,7 @@ ${svg}
         <header className="preview-header">
           <div>
             <h2>Assinatura executiva</h2>
-            <p></p>
+            <p>Base fiel à imagem aprovada, sem marcas d'água. Exportação atual: {outputSize}.</p>
           </div>
           <div className="device-tags">
             <span><Monitor size={16} /> Desktop</span>
