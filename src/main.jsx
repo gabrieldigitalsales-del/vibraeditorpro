@@ -308,6 +308,50 @@ function App() {
       setStatus(`JPG baixado: ${result.width} × ${result.height}px | ${result.sizeKb.toFixed(1)} KB.`);
     } catch (error) { console.error(error); setStatus(`Erro ao baixar JPG: ${error.message}`); }
   }
+  async function downloadPngHighQuality() {
+    try {
+      setStatus('Gerando PNG em altíssima qualidade...');
+      const bgData = await urlToDataUrl(DEFAULT_BG);
+      const svg = buildSignatureSvg(data, bgData);
+      const svgUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+      const img = new Image();
+
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+        img.src = svgUrl;
+      });
+
+      const scale = 2;
+      const canvas = document.createElement('canvas');
+      canvas.width = BASE_WIDTH * scale;
+      canvas.height = BASE_HEIGHT * scale;
+      const ctx = canvas.getContext('2d');
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+      if (!blob) {
+        setStatus('Erro ao gerar PNG. Tente novamente.');
+        return;
+      }
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `assinatura-${createSlug()}-alta-qualidade.png`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 500);
+      setStatus(`PNG em alta qualidade baixado: ${canvas.width} × ${canvas.height}px.`);
+    } catch (error) {
+      console.error(error);
+      setStatus(`Erro ao baixar PNG: ${error.message}`);
+    }
+  }
+
 
   function downloadHtmlFile() {
     if (!generatedHtml) return setStatus('Primeiro gere e envie a assinatura ao Supabase.');
@@ -375,6 +419,7 @@ function App() {
       <section className="export-grid">
         <button className="btn primary" onClick={generateAndUpload}><UploadCloud size={18} /> Gerar + enviar ao Supabase</button>
         <button className="btn secondary" onClick={downloadJpg}><ImageIcon size={18} /> Baixar JPG até 40 KB</button>
+        <button className="btn outline" onClick={downloadPngHighQuality}><ImageIcon size={18} /> Baixar PNG alta qualidade</button>
         <button className="btn ghost" onClick={copyHtml}><Copy size={18} /> Copiar HTML da assinatura</button>
         <button className="btn ghost" onClick={downloadHtmlFile}><FileCode2 size={18} /> Baixar HTML</button>
         <button className="btn outline" onClick={copyImageUrl}><Copy size={18} /> Copiar URL da imagem</button>
